@@ -1,0 +1,112 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>IT Infrastructure Dashboard</title>
+  <meta http-equiv="refresh" content="30">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Courier New', monospace; background: #0a0a0f; color: #e0e0e0; padding: 24px; }
+    h1 { font-size: 22px; color: #00e5a0; margin-bottom: 6px; }
+    .subtitle { color: #666; font-size: 13px; margin-bottom: 28px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+    .card { background: #16161f; border: 1px solid #2a2a3a; border-radius: 8px; padding: 20px; }
+    .card.online  { border-left: 4px solid #00e5a0; }
+    .card.offline { border-left: 4px solid #e24b4a; opacity: 0.6; }
+    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .server-name { font-size: 15px; font-weight: bold; color: #fff; }
+    .server-ip   { font-size: 11px; color: #666; }
+    .badge { font-size: 11px; padding: 3px 10px; border-radius: 10px; font-weight: bold; }
+    .badge.online  { background: #0f3d2e; color: #00e5a0; }
+    .badge.offline { background: #3d0f0f; color: #e24b4a; }
+    .metric { margin-bottom: 12px; }
+    .metric-label { font-size: 11px; color: #888; margin-bottom: 4px; display: flex; justify-content: space-between; }
+    .bar { height: 6px; background: #2a2a3a; border-radius: 3px; overflow: hidden; }
+    .fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
+    .fill.low    { background: #00e5a0; }
+    .fill.medium { background: #f0c040; }
+    .fill.high   { background: #e24b4a; }
+    .uptime { font-size: 11px; color: #555; margin-top: 10px; }
+    .summary { display: flex; gap: 20px; margin-bottom: 28px; flex-wrap: wrap; }
+    .stat { background: #16161f; border: 1px solid #2a2a3a; border-radius: 8px; padding: 14px 20px; }
+    .stat-num { font-size: 28px; font-weight: bold; color: #00e5a0; }
+    .stat-lbl { font-size: 11px; color: #666; margin-top: 2px; }
+    .loading { color: #555; font-size: 14px; padding: 40px; text-align: center; }
+  </style>
+</head>
+<body>
+  <h1>IT Infrastructure Dashboard</h1>
+  <p class="subtitle" id="updated">Loading servers...</p>
+
+  <div class="summary">
+    <div class="stat"><div class="stat-num" id="total">-</div><div class="stat-lbl">TOTAL SERVERS</div></div>
+    <div class="stat"><div class="stat-num" id="online-count" style="color:#00e5a0">-</div><div class="stat-lbl">ONLINE</div></div>
+    <div class="stat"><div class="stat-num" id="offline-count" style="color:#e24b4a">-</div><div class="stat-lbl">OFFLINE</div></div>
+    <div class="stat"><div class="stat-num" id="alerts" style="color:#f0c040">-</div><div class="stat-lbl">ALERTS</div></div>
+  </div>
+
+  <div class="grid" id="grid"><div class="loading">Connecting to servers...</div></div>
+
+<script>
+function getColor(val) {
+  if (val >= 80) return 'high';
+  if (val >= 50) return 'medium';
+  return 'low';
+}
+
+function renderCard(s) {
+  if (s.status === 'offline') {
+    return `<div class="card offline">
+      <div class="card-header">
+        <div><div class="server-name">${s.name}</div><div class="server-ip">${s.ip}</div></div>
+        <span class="badge offline">OFFLINE</span>
+      </div>
+      <div style="color:#666;font-size:13px">Unable to connect</div>
+    </div>`;
+  }
+  return `<div class="card online">
+    <div class="card-header">
+      <div><div class="server-name">${s.name}</div><div class="server-ip">${s.ip} — ${s.hostname}</div></div>
+      <span class="badge online">ONLINE</span>
+    </div>
+    <div class="metric">
+      <div class="metric-label"><span>CPU</span><span>${s.cpu.toFixed(1)}%</span></div>
+      <div class="bar"><div class="fill ${getColor(s.cpu)}" style="width:${s.cpu}%"></div></div>
+    </div>
+    <div class="metric">
+      <div class="metric-label"><span>RAM</span><span>${s.ram.toFixed(1)}%</span></div>
+      <div class="bar"><div class="fill ${getColor(s.ram)}" style="width:${s.ram}%"></div></div>
+    </div>
+    <div class="metric">
+      <div class="metric-label"><span>DISK</span><span>${s.disk.toFixed(1)}%</span></div>
+      <div class="bar"><div class="fill ${getColor(s.disk)}" style="width:${s.disk}%"></div></div>
+    </div>
+    <div class="uptime">Uptime: ${s.uptime}</div>
+  </div>`;
+}
+
+async function load() {
+  try {
+    const res = await fetch('/api/servers');
+    const data = await res.json();
+    const online  = data.filter(s => s.status === 'online').length;
+    const offline = data.filter(s => s.status === 'offline').length;
+    const alerts  = data.filter(s => s.cpu > 80 || s.ram > 80 || s.disk > 80).length;
+    document.getElementById('total').textContent         = data.length;
+    document.getElementById('online-count').textContent  = online;
+    document.getElementById('offline-count').textContent = offline;
+    document.getElementById('alerts').textContent        = alerts;
+    document.getElementById('grid').innerHTML            = data.map(renderCard).join('');
+    document.getElementById('updated').textContent       =
+      'Last updated: ' + new Date().toLocaleTimeString() + ' — auto-refreshes every 30 seconds';
+  } catch(e) {
+    document.getElementById('grid').innerHTML = '<div class="loading">Error loading data</div>';
+  }
+}
+
+load();
+setInterval(load, 30000);
+</script>
+</body>
+</html>
